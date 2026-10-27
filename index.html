@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agenda de Cálculos</title>
+<!-- Biblioteca para gerar o PDF e baixar automaticamente -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   *{box-sizing:border-box}
   body{
@@ -25,7 +27,7 @@
   /* ================= PAINEL DE TOTAIS ================= */
   .totais{
     display:grid;
-    grid-template-columns:repeat(auto-fit, minmax(95px, 1fr));
+    grid-template-columns:repeat(auto-fit, minmax(105px, 1fr));
     gap:8px;
     padding:14px;
     background:#f9fafb;
@@ -51,6 +53,12 @@
     overflow:hidden;
     text-overflow:ellipsis;
   }
+  .tot .val-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
   .tot .val{
     font-size:16px;
     font-weight:700;
@@ -58,6 +66,11 @@
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
+  }
+  .tot .pct {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
   }
   .tot[data-cat="gastos"]     { --c:#dc2626; }
   .tot[data-cat="depositos"]  { --c:#15803d; }
@@ -133,6 +146,7 @@
     select.cat{max-width:86px; font-size:11px}
     .dica{display:none}
     .tot .val{font-size:14px}
+    .tot .pct {font-size: 10px;}
   }
 
   /* ================= BARRA DE OPERADORES ================= */
@@ -155,33 +169,47 @@
   .barra-op button.ok:active{background:#1d4ed8}
 
   /* ================= ÁREA DE IMPRESSÃO / PDF ================= */
-  #printArea{display:none}
+  /* Fica escondida fora da tela para o html2pdf poder ler */
+  #printArea {
+    position: fixed;
+    left: -9999px;
+    top: 0;
+    width: 210mm; /* Largura A4 */
+    background: #fff;
+    padding: 10mm;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    color: #111827;
+  }
+  
+  /* Estilos internos do PDF */
+  #printArea h2{font-size:18px; margin:0 0 2px}
+  #printArea .sub{margin:0 0 12px; color:#6b7280; font-size:12px}
+  #printArea .totais-print{
+    display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px;
+  }
+  #printArea .chip{
+    padding:5px 10px; border-radius:6px; font-size:12px; font-weight:700;
+    border-left:4px solid; background:#fff;
+  }
+  #printArea table{width:100%; border-collapse:collapse; font-size:13px}
+  #printArea th{
+    text-align:left; font-size:10px; text-transform:uppercase;
+    letter-spacing:.06em; color:#6b7280;
+    border-bottom:1px solid #d1d5db; padding:6px 8px;
+  }
+  #printArea td{padding:6px 8px; border-bottom:1px solid #e5e7eb}
+  #printArea tfoot td{
+    border-top:2px solid #7c3aed; border-bottom:none; padding-top:8px;
+  }
+  *{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+
+  /* Ajustes caso o usuário aperte Ctrl+P no navegador */
   @media print{
     @page{ size:A4; margin:14mm 12mm; }
     body{margin:0; padding:0; background:#fff}
     body.com-barra{padding-bottom:0}
     .app, .acoes, .barra-op{display:none !important}
-    #printArea{display:block !important}
-    #printArea h2{font-size:18px; margin:0 0 2px}
-    #printArea .sub{margin:0 0 12px; color:#6b7280; font-size:12px}
-    #printArea .totais-print{
-      display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px;
-    }
-    #printArea .chip{
-      padding:5px 10px; border-radius:6px; font-size:12px; font-weight:700;
-      border-left:4px solid; background:#fff;
-    }
-    #printArea table{width:100%; border-collapse:collapse; font-size:13px}
-    #printArea th{
-      text-align:left; font-size:10px; text-transform:uppercase;
-      letter-spacing:.06em; color:#6b7280;
-      border-bottom:1px solid #d1d5db; padding:6px 8px;
-    }
-    #printArea td{padding:6px 8px; border-bottom:1px solid #e5e7eb}
-    #printArea tfoot td{
-      border-top:2px solid #7c3aed; border-bottom:none; padding-top:8px;
-    }
-    *{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+    #printArea { position: static; left: auto; width: auto; padding: 0; }
   }
 </style>
 </head>
@@ -212,7 +240,7 @@
   </table>
   <div class="acoes">
     <button id="btnNova">+ Nova linha</button>
-    <button id="btnPdf" class="pdf">Exportar PDF</button>
+    <button id="btnPdf" class="pdf">Baixar PDF</button>
     <button id="btnLimpar" class="secundaria">Limpar tudo</button>
     <span class="dica">No meio, digite tipo <b>100-20*2</b> e aperte <b>Enter</b>.</span>
   </div>
@@ -242,9 +270,15 @@
     const d = document.createElement('div');
     d.className = 'tot';
     d.dataset.cat = cat;
+    
     const rot = document.createElement('span'); rot.className = 'rot'; rot.textContent = CATEGORIAS[cat].nome;
+    
+    const valWrap = document.createElement('div'); valWrap.className = 'val-wrap';
     const val = document.createElement('span'); val.className = 'val'; val.textContent = '0,00';
-    d.append(rot, val);
+    const pct = document.createElement('span'); pct.className = 'pct'; pct.textContent = '(0%)';
+    
+    valWrap.append(val, pct);
+    d.append(rot, valWrap);
     totaisEl.appendChild(d);
   });
 
@@ -404,21 +438,39 @@
       const tdCalc = tr.querySelector('td.calc');
       const v = parseFloat(tdCalc.dataset.valor);
       if (Number.isNaN(v)) return;
+      
       geral += v;
       const cat = tr.querySelector('select.cat').value;
-      if (cat && totais[cat] !== undefined) totais[cat] += v;
+      
+      if (cat && totais[cat] !== undefined) {
+        if (cat === 'depositos') {
+          totais[cat] += Math.abs(v); 
+        } else {
+          totais[cat] += v;
+        }
+      }
     });
 
-    // rodapé (total geral)
+    const totalEntradas = totais.entradas;
+
     sobraEl.textContent = fmt.format(geral);
     sobraEl.classList.toggle('negativo', geral < 0);
 
-    // painel de totais
     Object.keys(totais).forEach(cat => {
-      const el = totaisEl.querySelector('.tot[data-cat="' + cat + '"] .val');
-      if (el) {
-        el.textContent = fmt.format(totais[cat]);
-        el.classList.toggle('negativo', totais[cat] < 0);
+      const elVal = totaisEl.querySelector('.tot[data-cat="' + cat + '"] .val');
+      const elPct = totaisEl.querySelector('.tot[data-cat="' + cat + '"] .pct');
+      
+      if (elVal) {
+        elVal.textContent = fmt.format(totais[cat]);
+        elVal.classList.toggle('negativo', totais[cat] < 0);
+      }
+      
+      if (elPct) {
+        let pct = 0;
+        if (totalEntradas !== 0) {
+          pct = (totais[cat] / totalEntradas) * 100;
+        }
+        elPct.textContent = `(${Math.abs(pct).toFixed(0)}%)`;
       }
     });
   }
@@ -608,7 +660,10 @@
 
       if (temValor) {
         geral += v;
-        if (cat && totais[cat] !== undefined) totais[cat] += v;
+        if (cat && totais[cat] !== undefined) {
+           if (cat === 'depositos') totais[cat] += Math.abs(v);
+           else totais[cat] += v;
+        }
       }
 
       const desc    = (inDesc.value || '').trim();
@@ -627,8 +682,15 @@
     const chips = Object.keys(CATEGORIAS).map(cat => {
       const c = CATEGORIAS[cat].cor;
       const bg = CATEGORIAS[cat].fundo;
+      let pctTxt = '';
+      
+      if (totais.entradas !== 0) {
+        const pct = (totais[cat] / totais.entradas) * 100;
+        pctTxt = ` (${Math.abs(pct).toFixed(0)}%)`;
+      }
+
       return '<span class="chip" style="color:' + c + ';border-left-color:' + c + ';background:' + bg + '">'
-        + CATEGORIAS[cat].nome + ': ' + fmt.format(totais[cat]) +
+        + CATEGORIAS[cat].nome + ': ' + fmt.format(totais[cat]) + pctTxt +
         '</span>';
     }).join('');
 
@@ -668,18 +730,36 @@
     atualizarTotais();
   });
 
+  /* ================= BAIXAR PDF ================= */
   document.getElementById('btnPdf').addEventListener('click', () => {
+    // Garante que qualquer valor sendo digitado seja confirmado
     corpo.querySelectorAll('td.calc input').forEach(inp => {
       if (!inp.hidden) inp.blur();
     });
     esconderBarra();
+    
+    // Monta o HTML na área de impressão
     montarImpressao();
-    setTimeout(() => window.print(), 60);
+    
+    // Pega a data para o nome do arquivo
+    const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+
+    // Opções de configuração do PDF
+    const opt = {
+      margin:       [10, 10, 10, 10], // Margens: Topo, Esquerda, Baixo, Direita
+      filename:     `Agenda_${dataHoje}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true }, // scale 2 melhora a qualidade
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    // Gera e baixa o PDF
+    html2pdf().set(opt).from(document.getElementById('printArea')).save();
   });
 
   window.addEventListener('beforeprint', montarImpressao);
   window.addEventListener('afterprint', () => {
-    document.getElementById('printArea').innerHTML = '';
+    // Não limpa o innerHTML aqui para não quebrar a geração do html2pdf se estiver em andamento
   });
 
   /* ================= INÍCIO ================= */
