@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agenda de Cálculos</title>
+<style>
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:24px 12px;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    background:#f3f4f6; color:#111827;
+  }
+  body.com-barra{padding-bottom:96px}
+  .app{
+    max-width:820px; margin:0 auto; background:#fff;
+    border-radius:14px; overflow:hidden;
+    box-shadow:0 8px 30px rgba(0,0,0,.08);
+  }
+  h1{
+    margin:0; padding:16px 18px; font-size:18px; font-weight:600;
+    background:#2563eb; color:#fff;
+  }
+
+  /* ================= PAINEL DE TOTAIS ================= */
+  .totais{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(95px, 1fr));
+    gap:8px;
+    padding:14px;
+    background:#f9fafb;
+    border-bottom:1px solid #e5e7eb;
+  }
+  .tot{
+    background:#fff;
+    border-radius:10px;
+    padding:9px 11px;
+    border-top:4px solid #ccc;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    box-shadow:0 1px 3px rgba(0,0,0,.04);
+    min-width:0;
+  }
+  .tot .rot{
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    font-weight:700;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .tot .val{
+    font-size:16px;
+    font-weight:700;
+    font-variant-numeric:tabular-nums;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .tot[data-cat="gastos"]     { --c:#dc2626; }
+  .tot[data-cat="depositos"]  { --c:#15803d; }
+  .tot[data-cat="pagamentos"] { --c:#a16207; }
+  .tot[data-cat="entradas"]   { --c:#2563eb; }
+  .tot[data-cat="sobra"]      { --c:#7c3aed; }
+  .tot { border-top-color: var(--c); }
+  .tot .rot { color: var(--c); }
+  .tot .val { color: var(--c); }
+  .tot .val.negativo { color:#dc2626; }
+
+  table{width:100%; border-collapse:collapse; table-layout:fixed}
+  th,td{
+    padding:8px 12px; border-bottom:1px solid #e5e7eb;
+    text-align:left; vertical-align:middle; font-size:15px;
+  }
+  th{
+    background:#f9fafb; color:#6b7280; font-size:11px;
+    text-transform:uppercase; letter-spacing:.06em; font-weight:600;
+  }
+  th:nth-child(1){width:46%}
+  th:nth-child(2){width:30%}
+  th:nth-child(3){width:24%}
+  input{
+    width:100%; border:0; outline:0; background:transparent;
+    font:inherit; color:inherit; padding:5px 2px;
+  }
+  input::placeholder{color:#c3c7cf}
+  td.calc input{font-variant-numeric:tabular-nums}
+
+  td.desc{padding:6px 10px}
+  .descwrap{display:flex; align-items:center; gap:6px}
+  select.cat{
+    font:inherit; font-size:12px; padding:3px 2px; border-radius:6px;
+    border:1px solid #d1d5db; background:#fff; color:#374151;
+    max-width:114px; flex:0 0 auto; cursor:pointer;
+  }
+  .descricao{flex:1 1 auto; min-width:0}
+
+  td.calc.erro input{color:#dc2626}
+  .resultado{
+    display:flex; flex-wrap:wrap; gap:5px; align-items:baseline;
+    padding:5px 2px; cursor:text;
+  }
+  .resultado .expr{color:#6b7280; font-size:13px}
+  .resultado .val{font-weight:600; font-variant-numeric:tabular-nums}
+  [hidden]{display:none !important}
+
+  tfoot td{
+    background:#f5f3ff; border-bottom:none;
+    border-top:2px solid #7c3aed; color:#7c3aed; font-weight:700;
+  }
+  tfoot td:first-child{
+    font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+  }
+  #sobra{font-size:19px; font-variant-numeric:tabular-nums}
+  #sobra.negativo{color:#dc2626}
+
+  .acoes{padding:12px 14px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  button{
+    font:inherit; font-weight:600; font-size:14px;
+    padding:9px 16px; border-radius:9px; border:0;
+    background:#2563eb; color:#fff; cursor:pointer;
+  }
+  button:hover{background:#1d4ed8}
+  button.secundaria{background:#e5e7eb; color:#374151}
+  button.secundaria:hover{background:#d1d5db}
+  button.pdf{background:#7c3aed}
+  button.pdf:hover{background:#6d28d9}
+  .dica{font-size:12px; color:#6b7280}
+  @media (max-width:560px){
+    th,td{padding:6px 8px; font-size:14px}
+    select.cat{max-width:86px; font-size:11px}
+    .dica{display:none}
+    .tot .val{font-size:14px}
+  }
+
+  /* ================= BARRA DE OPERADORES ================= */
+  .barra-op{
+    position:fixed; left:0; right:0; bottom:0; z-index:50;
+    display:flex; gap:6px; padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+    background:#111827;
+    box-shadow:0 -6px 24px rgba(0,0,0,.25);
+    overflow-x:auto; -webkit-overflow-scrolling:touch;
+  }
+  .barra-op button{
+    flex:1 1 0; min-width:46px; padding:13px 0;
+    font-size:19px; font-weight:600; line-height:1;
+    border-radius:10px; border:0; background:#374151; color:#fff;
+    cursor:pointer; user-select:none; -webkit-user-select:none;
+    touch-action:manipulation;
+  }
+  .barra-op button:active{background:#4b5563; transform:scale(.97)}
+  .barra-op button.ok{background:#2563eb}
+  .barra-op button.ok:active{background:#1d4ed8}
+
+  /* ================= ÁREA DE IMPRESSÃO / PDF ================= */
+  #printArea{display:none}
+  @media print{
+    @page{ size:A4; margin:14mm 12mm; }
+    body{margin:0; padding:0; background:#fff}
+    body.com-barra{padding-bottom:0}
+    .app, .acoes, .barra-op{display:none !important}
+    #printArea{display:block !important}
+    #printArea h2{font-size:18px; margin:0 0 2px}
+    #printArea .sub{margin:0 0 12px; color:#6b7280; font-size:12px}
+    #printArea .totais-print{
+      display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px;
+    }
+    #printArea .chip{
+      padding:5px 10px; border-radius:6px; font-size:12px; font-weight:700;
+      border-left:4px solid; background:#fff;
+    }
+    #printArea table{width:100%; border-collapse:collapse; font-size:13px}
+    #printArea th{
+      text-align:left; font-size:10px; text-transform:uppercase;
+      letter-spacing:.06em; color:#6b7280;
+      border-bottom:1px solid #d1d5db; padding:6px 8px;
+    }
+    #printArea td{padding:6px 8px; border-bottom:1px solid #e5e7eb}
+    #printArea tfoot td{
+      border-top:2px solid #7c3aed; border-bottom:none; padding-top:8px;
+    }
+    *{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <h1>Agenda</h1>
+
+  <!-- painel de totais -->
+  <div class="totais" id="totais"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>O que é</th>
+        <th>Valor / Cálculo</th>
+        <th>Data</th>
+      </tr>
+    </thead>
+    <tbody id="corpo"></tbody>
+    <tfoot>
+      <tr>
+        <td>Sobra (total geral)</td>
+        <td id="sobra">0,00</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="acoes">
+    <button id="btnNova">+ Nova linha</button>
+    <button id="btnPdf" class="pdf">Exportar PDF</button>
+    <button id="btnLimpar" class="secundaria">Limpar tudo</button>
+    <span class="dica">No meio, digite tipo <b>100-20*2</b> e aperte <b>Enter</b>.</span>
+  </div>
+</div>
+
+<div id="printArea"></div>
+
+<script>
+(function () {
+  const corpo     = document.getElementById('corpo');
+  const sobraEl   = document.getElementById('sobra');
+  const totaisEl  = document.getElementById('totais');
+  const fmt = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  /* ================= CATEGORIAS / CORES ================= */
+  const CATEGORIAS = {
+    gastos:     { nome: 'Gastos',     cor: '#dc2626', fundo: '#fef2f2' }, // vermelho
+    depositos:  { nome: 'Depósitos',  cor: '#15803d', fundo: '#f0fdf4' }, // verde
+    pagamentos: { nome: 'Pagamentos', cor: '#a16207', fundo: '#fefce8' }, // amarelo
+    entradas:   { nome: 'Entradas',   cor: '#2563eb', fundo: '#eff6ff' }, // azul
+    sobra:      { nome: 'Sobra',      cor: '#7c3aed', fundo: '#f5f3ff' }  // roxo
+  };
+  const COR_MANUAL = '#111827';
+
+  /* ================= MONTA O PAINEL DE TOTAIS (topo) ================= */
+  Object.keys(CATEGORIAS).forEach(cat => {
+    const d = document.createElement('div');
+    d.className = 'tot';
+    d.dataset.cat = cat;
+    const rot = document.createElement('span'); rot.className = 'rot'; rot.textContent = CATEGORIAS[cat].nome;
+    const val = document.createElement('span'); val.className = 'val'; val.textContent = '0,00';
+    d.append(rot, val);
+    totaisEl.appendChild(d);
+  });
+
+  /* ================= BARRA DE OPERADORES ================= */
+  let campoAtivo = null;
+
+  const barraOp = document.createElement('div');
+  barraOp.className = 'barra-op';
+  barraOp.hidden = true;
+
+  const OPS = [
+    { t: '+',  v: '+' },
+    { t: '−',  v: '-' },
+    { t: '×',  v: '*' },
+    { t: '÷',  v: '/' },
+    { t: '(',  v: '(' },
+    { t: ')',  v: ')' },
+    { t: ',',  v: ',' },
+    { t: '⌫',  act: 'back' },
+    { t: 'OK', act: 'ok', cls: 'ok' }
+  ];
+
+  OPS.forEach(o => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = o.t;
+    if (o.cls) b.className = o.cls;
+
+    b.addEventListener('pointerdown', e => e.preventDefault());
+    b.addEventListener('mousedown',   e => e.preventDefault());
+
+    b.addEventListener('click', e => {
+      e.preventDefault();
+      const inp = campoAtivo;
+      if (!inp) return;
+
+      if (o.act === 'back') {
+        const s  = inp.selectionStart ?? inp.value.length;
+        const en = inp.selectionEnd   ?? inp.value.length;
+        if (s !== en) {
+          inp.value = inp.value.slice(0, s) + inp.value.slice(en);
+          inp.setSelectionRange(s, s);
+        } else if (s > 0) {
+          inp.value = inp.value.slice(0, s - 1) + inp.value.slice(s);
+          inp.setSelectionRange(s - 1, s - 1);
+        }
+      } else if (o.act === 'ok') {
+        inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      } else {
+        const s  = inp.selectionStart ?? inp.value.length;
+        const en = inp.selectionEnd   ?? inp.value.length;
+        inp.value = inp.value.slice(0, s) + o.v + inp.value.slice(en);
+        const p = s + o.v.length;
+        inp.setSelectionRange(p, p);
+      }
+      inp.focus();
+    });
+
+    barraOp.appendChild(b);
+  });
+
+  document.body.appendChild(barraOp);
+
+  function mostrarBarra(inp) {
+    campoAtivo = inp;
+    barraOp.hidden = false;
+    document.body.classList.add('com-barra');
+  }
+  function esconderBarra() {
+    campoAtivo = null;
+    barraOp.hidden = true;
+    document.body.classList.remove('com-barra');
+  }
+
+  /* ================= CÁLCULO (parser seguro) ================= */
+  function normalizarNumero(raw) {
+    if (raw.includes(',')) return raw.replace(/\./g, '').replace(',', '.');
+    if (/^\d{1,3}(\.\d{3})+$/.test(raw)) return raw.replace(/\./g, '');
+    return raw;
+  }
+
+  function calcular(expressao) {
+    const s = expressao;
+    const tokens = [];
+    let i = 0;
+
+    while (i < s.length) {
+      const c = s[i];
+      if (/\s/.test(c)) { i++; continue; }
+      if (/[0-9.,]/.test(c)) {
+        let j = i;
+        while (j < s.length && /[0-9.,]/.test(s[j])) j++;
+        const norm = normalizarNumero(s.slice(i, j));
+        if (!/^(\d+\.?\d*|\.\d+)$/.test(norm)) throw new Error('número inválido');
+        tokens.push({ t: 'n', v: parseFloat(norm) });
+        i = j;
+      } else if ('+-*/()'.includes(c)) {
+        tokens.push({ t: 'o', v: c });
+        i++;
+      } else {
+        throw new Error('caractere inválido');
+      }
+    }
+    if (!tokens.length) throw new Error('vazio');
+
+    let p = 0;
+    const peek = () => tokens[p];
+    const next = () => tokens[p++];
+
+    function expr() {
+      let v = termo();
+      while (peek() && peek().t === 'o' && (peek().v === '+' || peek().v === '-')) {
+        const op = next().v;
+        const r = termo();
+        v = op === '+' ? v + r : v - r;
+      }
+      return v;
+    }
+    function termo() {
+      let v = fator();
+      while (peek() && peek().t === 'o' && (peek().v === '*' || peek().v === '/')) {
+        const op = next().v;
+        const r = fator();
+        v = op === '*' ? v * r : v / r;
+      }
+      return v;
+    }
+    function fator() {
+      const tk = peek();
+      if (!tk) throw new Error('falta um número');
+      if (tk.t === 'o' && tk.v === '-') { next(); return -fator(); }
+      if (tk.t === 'o' && tk.v === '+') { next(); return  fator(); }
+      if (tk.t === 'n') { next(); return tk.v; }
+      if (tk.t === 'o' && tk.v === '(') {
+        next();
+        const v = expr();
+        const f = peek();
+        if (!f || f.v !== ')') throw new Error('falta fechar parêntese');
+        next();
+        return v;
+      }
+      throw new Error('expressão inválida');
+    }
+
+    const res = expr();
+    if (p < tokens.length) throw new Error('expressão inválida');
+    if (!Number.isFinite(res)) throw new Error('resultado inválido');
+    return res;
+  }
+
+  /* ================= ATUALIZA TOTAIS (painel + rodapé) ================= */
+  function atualizarTotais() {
+    const totais = { gastos:0, depositos:0, pagamentos:0, entradas:0, sobra:0 };
+    let geral = 0;
+
+    corpo.querySelectorAll('tr').forEach(tr => {
+      const tdCalc = tr.querySelector('td.calc');
+      const v = parseFloat(tdCalc.dataset.valor);
+      if (Number.isNaN(v)) return;
+      geral += v;
+      const cat = tr.querySelector('select.cat').value;
+      if (cat && totais[cat] !== undefined) totais[cat] += v;
+    });
+
+    // rodapé (total geral)
+    sobraEl.textContent = fmt.format(geral);
+    sobraEl.classList.toggle('negativo', geral < 0);
+
+    // painel de totais
+    Object.keys(totais).forEach(cat => {
+      const el = totaisEl.querySelector('.tot[data-cat="' + cat + '"] .val');
+      if (el) {
+        el.textContent = fmt.format(totais[cat]);
+        el.classList.toggle('negativo', totais[cat] < 0);
+      }
+    });
+  }
+
+  /* ================= CORES DA LINHA ================= */
+  function aplicarCategoria(tr, cat) {
+    const sel    = tr.querySelector('select.cat');
+    const inDesc = tr.querySelector('input.descricao');
+    const td1    = tr.querySelector('td.desc');
+    const cfg    = cat ? CATEGORIAS[cat] : null;
+
+    tr.style.background   = cfg ? cfg.fundo : '';
+    td1.style.boxShadow   = cfg ? ('inset 4px 0 0 ' + cfg.cor) : 'none';
+    inDesc.style.color    = cfg ? cfg.cor : COR_MANUAL;
+    sel.style.color       = cfg ? cfg.cor : '#374151';
+    sel.style.borderColor = cfg ? cfg.cor : '#d1d5db';
+  }
+
+  /* ================= CRIA UMA LINHA ================= */
+  function criarLinha() {
+    const tr = document.createElement('tr');
+
+    const td1 = document.createElement('td');
+    td1.className = 'desc';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'descwrap';
+
+    const sel = document.createElement('select');
+    sel.className = 'cat';
+    sel.title = 'Categoria (opcional)';
+    sel.innerHTML = '<option value="">—</option>' +
+      Object.keys(CATEGORIAS).map(k =>
+        '<option value="' + k + '">' + CATEGORIAS[k].nome + '</option>'
+      ).join('');
+
+    const inDesc = document.createElement('input');
+    inDesc.type = 'text';
+    inDesc.className = 'descricao';
+    inDesc.placeholder = 'O que é...';
+    inDesc.autocomplete = 'off';
+    inDesc.style.color = COR_MANUAL;
+
+    wrap.append(sel, inDesc);
+    td1.appendChild(wrap);
+
+    const td2 = document.createElement('td');
+    td2.className = 'calc';
+
+    const inCalc = document.createElement('input');
+    inCalc.type = 'text';
+    inCalc.inputMode = 'decimal';
+    inCalc.enterKeyHint = 'done';
+    inCalc.placeholder = 'ex.: 100-20*2';
+    inCalc.autocomplete = 'off';
+    inCalc.spellcheck = false;
+
+    const outCalc = document.createElement('span');
+    outCalc.className = 'resultado';
+    outCalc.hidden = true;
+
+    td2.append(inCalc, outCalc);
+
+    const td3 = document.createElement('td');
+    const inData = document.createElement('input');
+    inData.type = 'date';
+    td3.appendChild(inData);
+
+    tr.append(td1, td2, td3);
+
+    /* ---------- troca de categoria ---------- */
+    sel.addEventListener('change', () => {
+      aplicarCategoria(tr, sel.value);
+      if (sel.value && !inDesc.value.trim()) {
+        inDesc.value = CATEGORIAS[sel.value].nome;
+      }
+      atualizarTotais();
+      inDesc.focus();
+    });
+
+    /* ---------- cálculo ---------- */
+    let ocupado = false;
+
+    function confirmar() {
+      if (ocupado) return;
+      const texto = inCalc.value.trim();
+
+      if (!texto) {
+        delete td2.dataset.valor;
+        outCalc.hidden = true;
+        inCalc.hidden = false;
+        td2.classList.remove('erro');
+        atualizarTotais();
+        return;
+      }
+
+      ocupado = true;
+      try {
+        const v = calcular(texto);
+        td2.dataset.valor = v;
+        td2.classList.remove('erro');
+        inCalc.removeAttribute('title');
+
+        outCalc.innerHTML = '';
+        const e = document.createElement('span');
+        e.className = 'expr';
+        e.textContent = texto + ' =';
+        const val = document.createElement('span');
+        val.className = 'val';
+        val.textContent = fmt.format(v);
+        outCalc.append(e, val);
+        outCalc.title = 'Clique para editar';
+
+        inCalc.hidden = true;
+        outCalc.hidden = false;
+        if (campoAtivo === inCalc) esconderBarra();
+        atualizarTotais();
+      } catch (err) {
+        td2.classList.add('erro');
+        inCalc.title = 'Não entendi: ' + err.message;
+      } finally {
+        ocupado = false;
+      }
+    }
+
+    inCalc.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { ev.preventDefault(); confirmar(); }
+      if (ev.key === 'Escape') { outCalc.hidden = true; inCalc.hidden = false; }
+    });
+
+    inCalc.addEventListener('focus',  () => mostrarBarra(inCalc));
+    inCalc.addEventListener('blur', () => {
+      if (campoAtivo === inCalc) esconderBarra();
+    });
+    inCalc.addEventListener('blur', () => {
+      setTimeout(() => { if (!inCalc.hidden) confirmar(); }, 10);
+    });
+
+    outCalc.addEventListener('click', () => {
+      outCalc.hidden = true;
+      inCalc.hidden = false;
+      inCalc.focus();
+      inCalc.select();
+    });
+
+    inDesc.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { ev.preventDefault(); inCalc.focus(); }
+    });
+
+    inData.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        if (tr === corpo.lastElementChild) adicionarLinha();
+      }
+    });
+
+    return tr;
+  }
+
+  /* ================= ADICIONA LINHA ================= */
+  function adicionarLinha(focar = true) {
+    const tr = criarLinha();
+    corpo.appendChild(tr);
+    if (focar) tr.querySelector('input').focus();
+    return tr;
+  }
+
+  /* ================= MONTAR ÁREA DE IMPRESSÃO / PDF ================= */
+  function montarImpressao() {
+    const area = document.getElementById('printArea');
+    const hoje = new Date().toLocaleDateString('pt-BR');
+
+    const totais = { gastos:0, depositos:0, pagamentos:0, entradas:0, sobra:0 };
+    let geral = 0;
+    const linhas = [];
+
+    corpo.querySelectorAll('tr').forEach(tr => {
+      const sel     = tr.querySelector('select.cat');
+      const inDesc  = tr.querySelector('input.descricao');
+      const tdCalc  = tr.querySelector('td.calc');
+      const inCalc  = tdCalc.querySelector('input');
+      const inData  = tr.querySelector('input[type=date]');
+
+      const v = parseFloat(tdCalc.dataset.valor);
+      const temValor = !Number.isNaN(v);
+      const cat = sel.value;
+
+      if (temValor) {
+        geral += v;
+        if (cat && totais[cat] !== undefined) totais[cat] += v;
+      }
+
+      const desc    = (inDesc.value || '').trim();
+      const rotulo  = desc || (cat ? CATEGORIAS[cat].nome : '');
+      const calcTxt = temValor ? fmt.format(v) : (inCalc.value || '').trim();
+      const dataTxt = inData.value ? inData.value.split('-').reverse().join('/') : '';
+
+      if (!rotulo && !calcTxt && !dataTxt) return;
+      linhas.push({ rotulo, calcTxt, dataTxt, cat });
+    });
+
+    const esc = s => String(s).replace(/[&<>"]/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
+    ));
+
+    const chips = Object.keys(CATEGORIAS).map(cat => {
+      const c = CATEGORIAS[cat].cor;
+      const bg = CATEGORIAS[cat].fundo;
+      return '<span class="chip" style="color:' + c + ';border-left-color:' + c + ';background:' + bg + '">'
+        + CATEGORIAS[cat].nome + ': ' + fmt.format(totais[cat]) +
+        '</span>';
+    }).join('');
+
+    const rows = linhas.map(l => {
+      const c  = l.cat ? CATEGORIAS[l.cat].cor   : COR_MANUAL;
+      const bg = l.cat ? CATEGORIAS[l.cat].fundo : '#ffffff';
+      return '<tr style="background:' + bg + '">'
+        + '<td style="border-left:4px solid ' + c + '; color:' + c + '; font-weight:600">' + esc(l.rotulo) + '</td>'
+        + '<td style="font-variant-numeric:tabular-nums">' + esc(l.calcTxt) + '</td>'
+        + '<td>' + esc(l.dataTxt) + '</td>'
+        + '</tr>';
+    }).join('');
+
+    area.innerHTML =
+      '<h2>Agenda</h2>' +
+      '<p class="sub">Emitido em ' + hoje + '</p>' +
+      '<div class="totais-print">' + chips + '</div>' +
+      '<table>' +
+        '<thead><tr><th>O que é</th><th>Valor / Cálculo</th><th>Data</th></tr></thead>' +
+        '<tbody>' + (rows || '<tr><td colspan="3" style="color:#9ca3af">Sem lançamentos</td></tr>') + '</tbody>' +
+        '<tfoot><tr>' +
+          '<td style="color:#7c3aed;font-weight:700;border-left:4px solid #7c3aed">Sobra (total geral)</td>' +
+          '<td style="color:#7c3aed;font-weight:700;font-variant-numeric:tabular-nums">' + fmt.format(geral) + '</td>' +
+          '<td></td>' +
+        '</tr></tfoot>' +
+      '</table>';
+  }
+
+  /* ================= BOTÕES ================= */
+  document.getElementById('btnNova').addEventListener('click', () => adicionarLinha());
+
+  document.getElementById('btnLimpar').addEventListener('click', () => {
+    if (!confirm('Apagar todas as linhas?')) return;
+    esconderBarra();
+    corpo.innerHTML = '';
+    for (let k = 0; k < 5; k++) adicionarLinha(false);
+    atualizarTotais();
+  });
+
+  document.getElementById('btnPdf').addEventListener('click', () => {
+    corpo.querySelectorAll('td.calc input').forEach(inp => {
+      if (!inp.hidden) inp.blur();
+    });
+    esconderBarra();
+    montarImpressao();
+    setTimeout(() => window.print(), 60);
+  });
+
+  window.addEventListener('beforeprint', montarImpressao);
+  window.addEventListener('afterprint', () => {
+    document.getElementById('printArea').innerHTML = '';
+  });
+
+  /* ================= INÍCIO ================= */
+  for (let k = 0; k < 5; k++) adicionarLinha(false);
+  atualizarTotais();
+})();
+</script>
+</body>
+</html>
